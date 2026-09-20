@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Punto de venta - Calzado en prueba</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header>
+  <h1>🏬 Punto de venta</h1>
+  <nav><a href="index.html">Tienda</a><a class="activo" href="pos.html">Punto de venta</a><a href="admin.html">Administración</a></nav>
+  <div id="sesion"></div>
+</header>
+<main>
+  <div id="msg" class="msg"></div>
+  <div id="contenido" class="hidden">
+    <section class="card">
+      <h2>1. Registrar salida temporal (calzado en prueba)</h2>
+      <div class="fila">
+        <label>Código de empleado<input id="codigo" placeholder="EMP001"></label>
+        <button class="ok" id="btn-salida">Registrar salida de los pares seleccionados</button>
+      </div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Producto</th><th>Talla</th><th>Color</th><th>Disponibles</th><th>Cantidad a retirar</th></tr></thead>
+        <tbody id="tabla-productos"></tbody>
+      </table></div>
+    </section>
+    <section class="card">
+      <h2>2. Mis pares en prueba</h2>
+      <div class="tablewrap"><table>
+        <thead><tr><th>#</th><th>Producto</th><th>Cant.</th><th>Salió</th><th>Acción</th></tr></thead>
+        <tbody id="tabla-prestamos"></tbody>
+      </table></div>
+    </section>
+  </div>
+</main>
+<script src="js/common.js"></script>
+<script>
+  const msg = document.getElementById("msg");
+  montarSesion("sesion", ["EMPLEADO_POS"], () => { document.getElementById("contenido").classList.remove("hidden"); cargar(); });
+
+  async function cargar() {
+    try {
+      const productos = await api("/productos");
+      document.getElementById("tabla-productos").innerHTML = productos.map(p => `
+        <tr><td>${esc(p.marca)} ${esc(p.modelo)}</td><td>${p.talla}</td><td>${esc(p.color)}</td><td>${p.stock_disponible}</td>
+        <td><input type="number" min="0" max="${p.stock_disponible}" value="0" data-id="${p.id}" style="width:70px"></td></tr>`).join("");
+      const prestamos = await api("/prestamos");
+      document.getElementById("tabla-prestamos").innerHTML = prestamos.map(x => `
+        <tr><td>${x.id}</td><td>${esc(x.producto.marca)} ${esc(x.producto.modelo)} T${x.producto.talla}</td><td>${x.cantidad}</td>
+        <td>${fechaLocal(x.fecha_hora_salida)}</td>
+        <td><button class="sec" onclick="liquidar(${x.id},'DEVOLVER')">Devolver al estante</button>
+            <button class="ok" onclick="liquidar(${x.id},'VENDER')">Vender / facturar</button></td></tr>`).join("")
+        || '<tr><td colspan="5">No tienes pares en prueba.</td></tr>';
+    } catch (e) { aviso(msg, e.message); }
+  }
+
+  document.getElementById("btn-salida").onclick = async () => {
+    const items = [...document.querySelectorAll("#tabla-productos input")]
+      .filter(i => +i.value > 0).map(i => ({ producto_id: +i.dataset.id, cantidad: +i.value }));
+    if (!items.length) return aviso(msg, "Indica la cantidad de al menos un producto.");
+    try {
+      await api("/prestamos", { metodo: "POST", cuerpo: { codigo_empleado: document.getElementById("codigo").value.trim(), items } });
+      aviso(msg, "Salida temporal registrada. Los pares quedaron en 'stock en prueba'.", "ok");
+      cargar();
+    } catch (e) { aviso(msg, e.message); }
+  };
+
+  async function liquidar(id, accion) {
+    try {
+      const r = await api(`/prestamos/${id}/liquidar`, { metodo: "POST", cuerpo: { accion } });
+      aviso(msg, accion === "VENDER" ? `Venta registrada. Factura ${r.venta.numero_factura} por ${dinero(r.venta.total)}.` : "Par devuelto al estante.", "ok");
+      cargar();
+    } catch (e) { aviso(msg, e.message); }
+  }
+</script>
+</body>
+</html>

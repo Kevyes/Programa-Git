@@ -1,0 +1,2 @@
+# Solo si vas a usar PostgreSQL (ver seccion de configuracion de base de datos)
+psycopg2-binary>=2.9

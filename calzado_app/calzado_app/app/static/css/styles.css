@@ -1,0 +1,28 @@
+:root { --azul:#1e3a5f; --acento:#e07a1f; --gris:#f3f4f6; --borde:#d1d5db; --ok:#15803d; --error:#b91c1c; }
+* { box-sizing: border-box; }
+body { margin:0; font-family: system-ui, Segoe UI, Arial, sans-serif; background:var(--gris); color:#111827; }
+header { background:var(--azul); color:#fff; padding:12px 24px; display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:space-between; }
+header h1 { margin:0; font-size:1.3rem; }
+nav a { color:#fff; margin-right:14px; text-decoration:none; opacity:.85; }
+nav a:hover, nav a.activo { opacity:1; text-decoration:underline; }
+main { max-width:1100px; margin:20px auto; padding:0 16px; }
+.card { background:#fff; border:1px solid var(--borde); border-radius:8px; padding:16px; margin-bottom:16px; }
+.card h2 { margin-top:0; font-size:1.1rem; }
+.fila { display:flex; flex-wrap:wrap; gap:8px; align-items:end; }
+label { display:flex; flex-direction:column; font-size:.85rem; gap:3px; }
+input, select { padding:7px 9px; border:1px solid var(--borde); border-radius:5px; font-size:.95rem; }
+button { background:var(--azul); color:#fff; border:0; padding:8px 14px; border-radius:5px; cursor:pointer; font-size:.9rem; }
+button:hover { filter:brightness(1.15); }
+button.sec { background:#6b7280; } button.ok { background:var(--ok); } button.peligro { background:var(--error); } button.acento { background:var(--acento); }
+table { width:100%; border-collapse:collapse; font-size:.9rem; }
+th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--borde); }
+th { background:var(--gris); }
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; }
+.producto { border:1px solid var(--borde); border-radius:8px; padding:12px; background:#fff; }
+.producto h3 { margin:0 0 4px; font-size:1rem; }
+.precio { font-weight:700; color:var(--acento); }
+.msg { padding:8px 12px; border-radius:5px; margin:8px 0; display:none; }
+.msg.ok { background:#dcfce7; color:var(--ok); display:block; }
+.msg.error { background:#fee2e2; color:var(--error); display:block; }
+.hidden { display:none !important; }
+.tablewrap { overflow-x:auto; }

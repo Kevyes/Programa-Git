@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Administración - Calzado</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header>
+  <h1>⚙️ Administración</h1>
+  <nav><a href="index.html">Tienda</a><a href="pos.html">Punto de venta</a><a class="activo" href="admin.html">Administración</a></nav>
+  <div id="sesion"></div>
+</header>
+<main>
+  <div id="msg" class="msg"></div>
+  <div id="contenido" class="hidden">
+    <section class="card">
+      <h2>Auditoría de retiradas temporales</h2>
+      <form id="form-aud" class="fila">
+        <label>Desde<input type="datetime-local" id="a-desde"></label>
+        <label>Hasta<input type="datetime-local" id="a-hasta"></label>
+        <label>Empleado<select id="a-emp"><option value="">Todos</option></select></label>
+        <button type="submit">Consultar</button>
+        <button type="button" class="acento" id="btn-csv">Exportar CSV</button>
+      </form>
+      <div class="tablewrap"><table>
+        <thead><tr><th>#</th><th>Empleado</th><th>Producto</th><th>Cant.</th><th>Estado</th><th>Salida</th><th>Retorno</th></tr></thead>
+        <tbody id="tabla-aud"></tbody>
+      </table></div>
+    </section>
+
+    <section class="card">
+      <h2>Inventario maestro</h2>
+      <form id="form-prod" class="fila">
+        <input type="hidden" id="p-id">
+        <label>Marca<input id="p-marca" required></label>
+        <label>Modelo<input id="p-modelo" required></label>
+        <label>Color<input id="p-color" required></label>
+        <label>Talla<input type="number" id="p-talla" min="20" max="50" required style="width:80px"></label>
+        <label>Precio (COP)<input type="number" id="p-precio" min="1" required></label>
+        <label>Stock disp.<input type="number" id="p-stock" min="0" required style="width:90px"></label>
+        <button type="submit" class="ok">Guardar producto</button>
+        <button type="button" class="sec" id="btn-limpiar">Limpiar</button>
+      </form>
+      <div class="tablewrap"><table>
+        <thead><tr><th>#</th><th>Producto</th><th>Talla</th><th>Color</th><th>Precio</th><th>Disponible</th><th>En prueba</th><th></th></tr></thead>
+        <tbody id="tabla-prod"></tbody>
+      </table></div>
+    </section>
+  </div>
+</main>
+<script src="js/common.js"></script>
+<script>
+  const msg = document.getElementById("msg");
+  let productos = [];
+  montarSesion("sesion", ["ADMIN"], () => { document.getElementById("contenido").classList.remove("hidden"); iniciar(); });
+
+  async function iniciar() {
+    try {
+      const empleados = await api("/usuarios/empleados");
+      document.getElementById("a-emp").innerHTML += empleados.map(e => `<option value="${e.id}">${esc(e.nombre)} (${esc(e.codigo_empleado)})</option>`).join("");
+      await Promise.all([auditar(), inventario()]);
+    } catch (e) { aviso(msg, e.message); }
+  }
+
+  function filtros() {
+    const p = new URLSearchParams();
+    const d = document.getElementById("a-desde").value, h = document.getElementById("a-hasta").value, e = document.getElementById("a-emp").value;
+    if (d) p.set("desde", new Date(d).toISOString());      // se envía en UTC
+    if (h) p.set("hasta", new Date(h).toISOString());
+    if (e) p.set("empleado_id", e);
+    return p.toString();
+  }
+
+  async function auditar() {
+    const filas = await api("/auditoria/prestamos?" + filtros());
+    document.getElementById("tabla-aud").innerHTML = filas.map(f => `
+      <tr><td>${f.id}</td><td>${esc(f.empleado_nombre)} (${esc(f.codigo_empleado)})</td><td>${esc(f.producto)}</td><td>${f.cantidad}</td>
+      <td>${esc(f.estado)}</td><td>${fechaLocal(f.fecha_hora_salida)}</td><td>${fechaLocal(f.fecha_hora_retorno)}</td></tr>`).join("")
+      || '<tr><td colspan="7">Sin registros para ese filtro.</td></tr>';
+  }
+  document.getElementById("form-aud").onsubmit = e => { e.preventDefault(); auditar().catch(x => aviso(msg, x.message)); };
+
+  document.getElementById("btn-csv").onclick = async () => {
+    try {
+      const r = await api("/auditoria/prestamos/export?" + filtros(), { crudo: true });
+      const enlace = document.createElement("a");
+      enlace.href = URL.createObjectURL(await r.blob());
+      enlace.download = "auditoria_prestamos.csv"; enlace.click();
+    } catch (e) { aviso(msg, e.message); }
+  };
+
+  async function inventario() {
+    productos = await api("/productos/todos");
+    document.getElementById("tabla-prod").innerHTML = productos.map(p => `
+      <tr><td>${p.id}</td><td>${esc(p.marca)} ${esc(p.modelo)}</td><td>${p.talla}</td><td>${esc(p.color)}</td><td>${dinero(p.precio)}</td>
+      <td>${p.stock_disponible}</td><td>${p.stock_en_prueba}</td><td><button class="sec" onclick="editar(${p.id})">Editar</button></td></tr>`).join("");
+  }
+
+  function editar(id) {
+    const p = productos.find(x => x.id === id);
+    ["id", "marca", "modelo", "color", "talla", "precio"].forEach(k => document.getElementById("p-" + k).value = p[k]);
+    document.getElementById("p-stock").value = p.stock_disponible;
+    window.scrollTo({ top: document.getElementById("form-prod").offsetTop, behavior: "smooth" });
+  }
+  document.getElementById("btn-limpiar").onclick = () => document.getElementById("form-prod").reset();
+
+  document.getElementById("form-prod").onsubmit = async e => {
+    e.preventDefault();
+    const v = k => document.getElementById("p-" + k).value;
+    const cuerpo = { marca: v("marca"), modelo: v("modelo"), color: v("color"), talla: +v("talla"), precio: +v("precio"), stock_disponible: +v("stock") };
+    try {
+      await api(v("id") ? "/productos/" + v("id") : "/productos", { metodo: v("id") ? "PUT" : "POST", cuerpo });
+      aviso(msg, "Producto guardado.", "ok"); e.target.reset(); inventario();
+    } catch (err) { aviso(msg, err.message); }
+  };
+</script>
+</body>
+</html>

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tienda virtual de calzado</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header>
+  <h1>👟 Tienda de Calzado</h1>
+  <nav><a class="activo" href="index.html">Tienda</a><a href="pos.html">Punto de venta</a><a href="admin.html">Administración</a></nav>
+  <div id="sesion"></div>
+</header>
+<main>
+  <section class="card">
+    <h2>Explorar catálogo</h2>
+    <form id="filtros" class="fila">
+      <label>Talla<input type="number" id="f-talla" min="20" max="50" style="width:80px"></label>
+      <label>Marca<input id="f-marca"></label>
+      <label>Color<input id="f-color"></label>
+      <label>Modelo<input id="f-modelo"></label>
+      <button type="submit">Buscar</button>
+    </form>
+  </section>
+  <div id="msg" class="msg"></div>
+  <div class="grid" id="catalogo"></div>
+
+  <section class="card" style="margin-top:16px">
+    <h2>🛒 Mi carrito</h2>
+    <div class="tablewrap"><table><thead><tr><th>Producto</th><th>Cant.</th><th>Subtotal</th><th></th></tr></thead><tbody id="carrito"></tbody></table></div>
+    <p><b>Total: <span id="total">$0</span></b></p>
+    <button class="ok" id="btn-comprar">Pagar</button>
+    <small> (El pago se simula; aquí se conectaría la pasarela.)</small>
+  </section>
+</main>
+<script src="js/common.js"></script>
+<script>
+  let productos = [];
+  let carrito = {};                 // { producto_id: cantidad }
+  const msg = document.getElementById("msg");
+
+  montarSesion("sesion", ["CLIENTE"], () => {}, true);   // el catálogo es público; comprar requiere ser CLIENTE
+
+  async function cargar() {
+    const p = new URLSearchParams();
+    [["talla", "f-talla"], ["marca", "f-marca"], ["color", "f-color"], ["modelo", "f-modelo"]].forEach(([k, id]) => {
+      const v = document.getElementById(id).value.trim(); if (v) p.set(k, v);
+    });
+    try {
+      productos = await api("/productos?" + p.toString());
+      document.getElementById("catalogo").innerHTML = productos.length ? productos.map(x => `
+        <div class="producto"><h3>${esc(x.marca)} ${esc(x.modelo)}</h3>
+          <div>Color: ${esc(x.color)} · Talla: ${x.talla}</div>
+          <div class="precio">${dinero(x.precio)}</div>
+          <small>Disponibles: ${x.stock_disponible}</small><br>
+          <button class="acento" onclick="agregar(${x.id})">Agregar al carrito</button>
+        </div>`).join("") : "<p>No hay productos con esos filtros.</p>";
+    } catch (e) { aviso(msg, e.message); }
+  }
+
+  function agregar(id) {
+    const p = productos.find(x => x.id === id);
+    if ((carrito[id] || 0) >= p.stock_disponible) return aviso(msg, "No hay más unidades disponibles de este producto.");
+    carrito[id] = (carrito[id] || 0) + 1; msg.className = "msg"; pintarCarrito();
+  }
+  function quitar(id) { carrito[id]--; if (carrito[id] <= 0) delete carrito[id]; pintarCarrito(); }
+
+  const conocidos = {};             // recuerda datos de productos aunque cambie el filtro
+  function pintarCarrito() {
+    productos.forEach(p => conocidos[p.id] = p);
+    let total = 0;
+    document.getElementById("carrito").innerHTML = Object.entries(carrito).map(([id, cant]) => {
+      const p = conocidos[id]; total += p.precio * cant;
+      return `<tr><td>${esc(p.marca)} ${esc(p.modelo)} T${p.talla}</td><td>${cant}</td><td>${dinero(p.precio * cant)}</td>
+              <td><button class="peligro" onclick="quitar(${id})">−</button></td></tr>`;
+    }).join("") || '<tr><td colspan="4">El carrito está vacío</td></tr>';
+    document.getElementById("total").textContent = dinero(total);
+  }
+
+  document.getElementById("btn-comprar").onclick = async () => {
+    if (!Object.keys(carrito).length) return aviso(msg, "Agrega productos al carrito.");
+    if (Sesion.rol !== "CLIENTE") return aviso(msg, "Inicia sesión como cliente para pagar (arriba a la derecha).");
+    try {
+      const items = Object.entries(carrito).map(([id, cant]) => ({ producto_id: +id, cantidad: cant }));
+      const v = await api("/ventas/web", { metodo: "POST", cuerpo: { items } });
+      aviso(msg, `¡Compra exitosa! Factura ${v.numero_factura} por ${dinero(v.total)}.`, "ok");
+      carrito = {}; pintarCarrito(); cargar();
+    } catch (e) { aviso(msg, e.message); }
+  };
+  document.getElementById("filtros").onsubmit = e => { e.preventDefault(); cargar(); };
+  cargar(); pintarCarrito();
+</script>
+</body>
+</html>
